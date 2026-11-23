@@ -119,7 +119,7 @@ test('HTTP bridge enforces Bearer auth, lists enabled models, and serves plain &
     assert.equal(toolRes.status, 200);
     const toolJson = await toolRes.json();
     assert.equal(toolJson.choices[0].finish_reason, 'tool_calls');
-    assert.equal(toolJson.choices[0].message.tool_calls[0].id, 'call_000001');
+    assert.match(toolJson.choices[0].message.tool_calls[0].id, /^call_[0-9a-f]{24}$/);
     assert.equal(toolJson.choices[0].message.tool_calls[0].function.name, 'done');
     assert.equal(toolJson.usage.total_tokens, 52);
 

@@ -1,3 +1,8 @@
+import { randomBytes } from 'node:crypto';
+import { rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { BridgeError, runSubprocess } from './base.mjs';
 
 const DEFAULT_MODELS = ['gpt-5', 'gpt-5-mini', 'o4-mini'];
@@ -14,30 +19,60 @@ export function createCodexDriver(config, runner = runSubprocess) {
     id: 'codex',
     defaultModel: models[0],
     models,
-    async invoke({ model, prompt, signal }) {
-      // --sandbox read-only blocks filesystem writes; --skip-git-repo-check lets codex
-      // run inside the empty /work tmpfs container without requiring a git repository.
+    modelLimits: {
+      contextWindow: 200_000,
+      maxOutputTokens: 32_768,
+    },
+    async invoke({ model, prompt, jsonSchema, strictJsonSchema, signal }) {
+      // --sandbox read-only blocks filesystem writes; --ephemeral prevents writing session
+      // files; --ignore-user-config and --ignore-rules block user MCP servers/overrides;
+      // --skip-git-repo-check lets codex run inside the empty /work tmpfs container.
       const args = [
         'exec',
         '--sandbox',
         'read-only',
         '--skip-git-repo-check',
+        '--ephemeral',
+        '--ignore-user-config',
+        '--ignore-rules',
         '--json',
         '--model',
         model,
-        '-',
       ];
 
-      const { stdout } = await runner({
-        binary: config.binaries.codex,
-        args,
-        stdin: prompt,
-        cwd: config.workDir,
-        timeoutMs: config.timeoutMs,
-        killGraceMs: config.killGraceMs,
-        maxOutputBytes: config.maxOutputBytes,
-        signal,
-      });
+      // OpenAI's strict structured-output validator requires explicit `properties` on every
+      // object node, so Codex uses `strictJsonSchema` where `arguments` is a JSON-encoded string.
+      const effectiveSchema = strictJsonSchema || jsonSchema;
+      let schemaFile = null;
+      if (effectiveSchema && typeof effectiveSchema === 'object') {
+        schemaFile = join(tmpdir(), `cli-bridge-codex-schema-${randomBytes(8).toString('hex')}.json`);
+        writeFileSync(schemaFile, JSON.stringify(effectiveSchema), { encoding: 'utf8', mode: 0o600 });
+        args.push('--output-schema', schemaFile);
+      }
+
+      args.push('-');
+
+      let stdout;
+      try {
+        ({ stdout } = await runner({
+          binary: config.binaries.codex,
+          args,
+          stdin: prompt,
+          cwd: config.workDir,
+          timeoutMs: config.timeoutMs,
+          killGraceMs: config.killGraceMs,
+          maxOutputBytes: config.maxOutputBytes,
+          signal,
+        }));
+      } finally {
+        if (schemaFile) {
+          try {
+            rmSync(schemaFile, { force: true });
+          } catch {
+            // Best-effort temp cleanup.
+          }
+        }
+      }
 
       const lines = stdout
         .split(/\r?\n/)

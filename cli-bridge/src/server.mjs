@@ -7,7 +7,7 @@ import { createGeminiDriver } from './drivers/gemini.mjs';
 import { createStdioJsonDriver } from './drivers/stdio-json.mjs';
 import { BridgeError, DriverRegistry } from './drivers/base.mjs';
 import {
-  buildBridgePrompt,
+  buildBridgePayload,
   createCallIdGenerator,
   formatCompletionResponse,
   formatOpenAiError,
@@ -189,9 +189,11 @@ export function createBridgeApp(config, { runner, logger = console } = {}) {
       }
 
       if (method === 'GET' && isModelsRoute) {
+        const models = registry.listModels();
+        logger.log?.(`[cli-bridge] GET ${pathname} -> 200 (${models.length} models)`);
         sendJson(res, 200, {
           object: 'list',
-          data: registry.listModels(),
+          data: models,
         });
         return;
       }
@@ -220,6 +222,7 @@ export function createBridgeApp(config, { runner, logger = console } = {}) {
         res.on('close', onResClose);
 
         let qualifiedModel = '';
+        const startedAt = Date.now();
         try {
           const rawBody = await readJsonBody(req, config.maxRequestBytes);
 
@@ -232,7 +235,7 @@ export function createBridgeApp(config, { runner, logger = console } = {}) {
           const resolved = registry.resolve(validated.model);
           qualifiedModel = resolved.qualifiedModel;
 
-          const prompt = buildBridgePrompt({
+          const payload = buildBridgePayload({
             messages: validated.messages,
             tools: validated.tools,
             toolChoice: validated.toolChoice,
@@ -241,7 +244,11 @@ export function createBridgeApp(config, { runner, logger = console } = {}) {
 
           const driverOutput = await resolved.driver.invoke({
             model: resolved.model,
-            prompt,
+            prompt: payload.prompt,
+            systemPrompt: payload.systemPrompt,
+            userPrompt: payload.userPrompt,
+            jsonSchema: payload.jsonSchema,
+            strictJsonSchema: payload.strictJsonSchema,
             messages: validated.messages,
             tools: validated.tools,
             toolChoice: validated.toolChoice,
@@ -264,6 +271,12 @@ export function createBridgeApp(config, { runner, logger = console } = {}) {
           completionCounter += 1;
           const id = `chatcmpl-clibridge-${completionCounter}`;
           const created = Math.floor(Date.now() / 1000);
+          const elapsedMs = Date.now() - startedAt;
+          const promptTok = driverOutput?.usage?.prompt_tokens ?? 0;
+          const compTok = driverOutput?.usage?.completion_tokens ?? 0;
+          logger.log?.(
+            `[cli-bridge] POST ${pathname} model=${resolved.qualifiedModel} stream=${validated.stream} finish=${parsed.finishReason} tools=${parsed.toolCalls.length} tokens=${promptTok}/${compTok} ms=${elapsedMs}`
+          );
 
           if (validated.stream) {
             writeSseCompletion(res, {

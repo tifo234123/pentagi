@@ -50,8 +50,13 @@ test('DriverRegistry enforces explicit allowlist and exposes only enabled models
     createStdioJsonDriver(cfg),
   ]);
 
-  const models = registry.listModels().map((m) => m.id);
-  assert.deepEqual(models, ['claude/sonnet', 'claude/opus']);
+  const modelEntries = registry.listModels();
+  assert.deepEqual(
+    modelEntries.map((m) => m.id),
+    ['claude/sonnet', 'claude/opus']
+  );
+  assert.equal(modelEntries[0].context_window, 200_000);
+  assert.equal(modelEntries[0].max_output_tokens, 64_000);
 
   const ok = registry.resolve('claude/sonnet');
   assert.equal(ok.driver.id, 'claude');
@@ -68,16 +73,20 @@ test('claude, codex, gemini, and stdio-json drivers pass no-host-tool flags and 
       dir,
       'fake-claude',
       `
+      const fs = require('node:fs');
       const args = process.argv.slice(2);
       const chunks = [];
       process.stdin.on('data', (c) => chunks.push(c));
       process.stdin.on('end', () => {
         const hasDisabledTools = args.includes('--tools') && args[args.indexOf('--tools') + 1] === '';
-        if (!hasDisabledTools) process.exit(42);
+        const sysIdx = args.indexOf('--system-prompt-file');
+        const hasSys = sysIdx !== -1 && fs.readFileSync(args[sysIdx + 1], 'utf8').includes('PentAGI system');
+        const hasSchema = args.includes('--json-schema');
+        if (!hasDisabledTools || !hasSys || !hasSchema) process.exit(42);
         process.stdout.write(JSON.stringify({
           type: 'result',
-          result: JSON.stringify({ content: null, tool_calls: [{ name: 'done', arguments: { result: 'from-claude' } }] }),
-          usage: { input_tokens: 15, output_tokens: 8 }
+          structured_output: { content: null, tool_calls: [{ name: 'done', arguments: { result: 'from-claude' } }] },
+          usage: { input_tokens: 2, cache_read_input_tokens: 10, cache_creation_input_tokens: 3, output_tokens: 8 }
         }));
       });
       `
@@ -88,7 +97,8 @@ test('claude, codex, gemini, and stdio-json drivers pass no-host-tool flags and 
       'fake-codex',
       `
       const args = process.argv.slice(2);
-      if (!args.includes('read-only') || !args.includes('--skip-git-repo-check')) process.exit(43);
+      const required = ['read-only', '--skip-git-repo-check', '--ephemeral', '--ignore-user-config', '--ignore-rules', '--output-schema'];
+      if (!required.every((f) => args.includes(f))) process.exit(43);
       process.stdin.resume();
       process.stdin.on('end', () => {
         process.stdout.write(JSON.stringify({ type: 'thread.started' }) + '\\n');
@@ -105,6 +115,8 @@ test('claude, codex, gemini, and stdio-json drivers pass no-host-tool flags and 
       dir,
       'fake-gemini',
       `
+      const args = process.argv.slice(2);
+      if (!args.includes('--approval-mode') || !args.includes('plan')) process.exit(44);
       process.stdin.resume();
       process.stdin.on('end', () => {
         process.stdout.write(JSON.stringify({
@@ -139,11 +151,18 @@ test('claude, codex, gemini, and stdio-json drivers pass no-host-tool flags and 
       CLI_BRIDGE_STDIO_JSON_BIN: fakeStdio,
     });
 
-    const claudeRes = await createClaudeDriver(cfg).invoke({ model: 'sonnet', prompt: 'hello' });
-    assert.match(claudeRes.text, /from-claude/);
+    const sampleSchema = { type: 'object', properties: { content: { type: ['string', 'null'] }, tool_calls: { type: 'array' } } };
+    const claudeRes = await createClaudeDriver(cfg).invoke({
+      model: 'sonnet',
+      prompt: 'hello',
+      systemPrompt: 'PentAGI system prompt',
+      userPrompt: 'hello',
+      jsonSchema: sampleSchema,
+    });
+    assert.equal(claudeRes.tool_calls[0].arguments.result, 'from-claude');
     assert.equal(claudeRes.usage.prompt_tokens, 15);
 
-    const codexRes = await createCodexDriver(cfg).invoke({ model: 'gpt-5', prompt: 'hello' });
+    const codexRes = await createCodexDriver(cfg).invoke({ model: 'gpt-5', prompt: 'hello', jsonSchema: sampleSchema });
     assert.equal(codexRes.text, 'codex-answer');
     assert.equal(codexRes.usage.completion_tokens, 9);
 

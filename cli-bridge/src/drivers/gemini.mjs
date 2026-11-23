@@ -40,10 +40,14 @@ export function createGeminiDriver(config, runner = runSubprocess) {
     id: 'gemini',
     defaultModel: models[0],
     models,
+    modelLimits: {
+      contextWindow: 1_000_000,
+      maxOutputTokens: 65_536,
+    },
     async invoke({ model, prompt, signal }) {
-      // Prompt supplied on stdin. Run inside the isolated cli-bridge container with an
-      // empty workDir and no mounted host credentials or auto-approved tools.
-      const args = ['-p', '', '--output-format', 'json', '--model', model];
+      // Prompt supplied on stdin. --approval-mode plan restricts Gemini CLI to read-only
+      // planning mode so host mutations cannot occur outside PentAGI's Docker sandbox.
+      const args = ['-p', '', '--approval-mode', 'plan', '--output-format', 'json', '--model', model];
 
       const { stdout } = await runner({
         binary: config.binaries.gemini,

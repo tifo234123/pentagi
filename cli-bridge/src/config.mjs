@@ -67,7 +67,7 @@ export function loadConfig(env = process.env) {
     min: 4_096,
     max: 33_554_432,
   });
-  const maxConcurrent = parsePositiveInt(env.CLI_BRIDGE_MAX_CONCURRENT, 4, {
+  const maxConcurrent = parsePositiveInt(env.CLI_BRIDGE_MAX_CONCURRENT, 8, {
     min: 1,
     max: 64,
   });

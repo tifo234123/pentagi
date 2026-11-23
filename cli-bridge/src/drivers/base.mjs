@@ -269,13 +269,21 @@ export class DriverRegistry {
   listModels() {
     const out = [];
     for (const driver of this.listEnabledDrivers()) {
+      const limits = driver.modelLimits || {};
       for (const model of driver.models) {
-        out.push({
+        const entry = {
           id: `${driver.id}/${model}`,
           object: 'model',
           created: 1767225600,
           owned_by: `cli-bridge:${driver.id}`,
-        });
+        };
+        if (Number.isFinite(limits.contextWindow) && limits.contextWindow > 0) {
+          entry.context_window = limits.contextWindow;
+        }
+        if (Number.isFinite(limits.maxOutputTokens) && limits.maxOutputTokens > 0) {
+          entry.max_output_tokens = limits.maxOutputTokens;
+        }
+        out.push(entry);
       }
     }
     return out;

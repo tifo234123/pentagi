@@ -49,7 +49,7 @@ test('protocol enforces tool_choice=none, forced tool_choice, response_format=js
     tools: TOOLS,
     toolChoice: 'none',
   });
-  assert.doesNotMatch(promptNone, /## Available PentAGI Tools/);
+  assert.doesNotMatch(promptNone, /## PentAGI Tool Execution Contract/);
 
   const suppressed = parseCliModelOutput(
     { content: 'plain text', tool_calls: [{ name: 'done', arguments: {} }] },
@@ -81,7 +81,7 @@ test('protocol enforces tool_choice=none, forced tool_choice, response_format=js
   const parsedTricky = parseCliModelOutput(tricky, TOOLS, nextId);
   assert.equal(parsedTricky.finishReason, 'tool_calls');
   assert.equal(parsedTricky.toolCalls[0].function.name, 'done');
-  assert.equal(parsedTricky.toolCalls[0].function.arguments, '{}');
+  assert.equal(parsedTricky.toolCalls[0].function.arguments, '[1,2,3]');
 
   // response_format: json_object unwraps Markdown fences
   const jsonPrompt = buildBridgePrompt({
@@ -275,7 +275,7 @@ test('HTTP server handles malformed URLs safely, enforces auth on unprefixed rou
     });
     assert.equal(sseToolRes.status, 200);
     const sseToolText = await sseToolRes.text();
-    assert.match(sseToolText, /"tool_calls":\[\{"index":0,"id":"call_000001"/);
+    assert.match(sseToolText, /"tool_calls":\[\{"index":0,"id":"call_[0-9a-f]{24}"/);
     assert.match(sseToolText, /"usage":\{"prompt_tokens":21,"completion_tokens":9,"total_tokens":30\}/);
     assert.doesNotMatch(sseToolText, /red-secret-777/);
     assert.doesNotMatch(sseToolText, /quote/);
