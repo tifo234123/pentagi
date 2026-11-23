@@ -1,0 +1,65 @@
+# Opt-in T3-inspired multi-CLI agent bridge overlay for PentAGI.
+# Connects PentAGI's existing `custom` provider (`LLM_SERVER_*`) to the isolated
+# `cli-bridge` sidecar while keeping PentAGI's core rules, persistence, and
+# per-flow Docker sandbox execution completely unchanged.
+#
+# Launch alongside the isolated workshop stack:
+#   docker compose -p pentagi-workshop --env-file .env.workshop \
+#     -f docker-compose.yml -f docker-compose.workshop.yml -f docker-compose-cli-bridge.yml \
+#     up -d --build --wait --wait-timeout 240
+
+services:
+  cli-bridge:
+    build:
+      context: ./cli-bridge
+      dockerfile: Dockerfile
+    image: ${CLI_BRIDGE_IMAGE:-local/pentagi-cli-bridge:workshop}
+    container_name: ${CLI_BRIDGE_CONTAINER_NAME:-pentagi-workshop-cli-bridge}
+    restart: unless-stopped
+    # PID 1 zombie reaper for spawned CLI child/grandchild processes.
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+      - /work:size=128m,mode=0755
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    expose:
+      - "8090/tcp"
+    environment:
+      - CLI_BRIDGE_HOST=0.0.0.0
+      - CLI_BRIDGE_PORT=8090
+      - CLI_BRIDGE_API_KEY=${CLI_BRIDGE_API_KEY:-workshop-cli-bridge-token}
+      - CLI_BRIDGE_ENABLED_DRIVERS=${CLI_BRIDGE_ENABLED_DRIVERS:-}
+      - CLI_BRIDGE_DEFAULT_DRIVER=${CLI_BRIDGE_DEFAULT_DRIVER:-}
+      - CLI_BRIDGE_TIMEOUT_MS=${CLI_BRIDGE_TIMEOUT_MS:-120000}
+      - CLI_BRIDGE_KILL_GRACE_MS=${CLI_BRIDGE_KILL_GRACE_MS:-2000}
+      - CLI_BRIDGE_MAX_OUTPUT_BYTES=${CLI_BRIDGE_MAX_OUTPUT_BYTES:-1048576}
+      - CLI_BRIDGE_MAX_REQUEST_BYTES=${CLI_BRIDGE_MAX_REQUEST_BYTES:-2097152}
+      - CLI_BRIDGE_MAX_CONCURRENT=${CLI_BRIDGE_MAX_CONCURRENT:-4}
+      - CLI_BRIDGE_CLAUDE_BIN=${CLI_BRIDGE_CLAUDE_BIN:-claude}
+      - CLI_BRIDGE_CODEX_BIN=${CLI_BRIDGE_CODEX_BIN:-codex}
+      - CLI_BRIDGE_GEMINI_BIN=${CLI_BRIDGE_GEMINI_BIN:-gemini}
+      - CLI_BRIDGE_STDIO_JSON_BIN=${CLI_BRIDGE_STDIO_JSON_BIN:-}
+      - CLI_BRIDGE_CLAUDE_MODELS=${CLI_BRIDGE_CLAUDE_MODELS:-sonnet,opus,haiku}
+      - CLI_BRIDGE_CODEX_MODELS=${CLI_BRIDGE_CODEX_MODELS:-gpt-5,gpt-5-mini,o4-mini}
+      - CLI_BRIDGE_GEMINI_MODELS=${CLI_BRIDGE_GEMINI_MODELS:-gemini-2.5-pro,gemini-2.5-flash}
+      - CLI_BRIDGE_STDIO_JSON_MODELS=${CLI_BRIDGE_STDIO_JSON_MODELS:-default}
+      - CLI_BRIDGE_REDACT_VALUES=${CLI_BRIDGE_REDACT_VALUES:-}
+      - CLI_BRIDGE_WORK_DIR=/work
+    networks:
+      - pentagi-network
+
+  pentagi:
+    depends_on:
+      cli-bridge:
+        condition: service_healthy
+    environment:
+      - LLM_SERVER_URL=http://cli-bridge:8090/v1
+      - LLM_SERVER_KEY=${CLI_BRIDGE_API_KEY:-workshop-cli-bridge-token}
+      - LLM_SERVER_MODEL=${CLI_BRIDGE_DEFAULT_MODEL:-claude/sonnet}
+      - LLM_SERVER_CONFIG_PATH=/opt/pentagi/conf/custom.provider.yml
+    volumes:
+      - ./examples/configs/cli-bridge.provider.yml:/opt/pentagi/conf/custom.provider.yml:ro
