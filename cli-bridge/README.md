@@ -35,6 +35,17 @@ Opt-in, zero-dependency Node 24 sidecar inspired by T3 Code's multi-CLI driver h
 | `CLI_BRIDGE_STDIO_JSON_BIN` | *(empty)* | Path to generic JSON-stdio CLI binary |
 | `CLI_BRIDGE_REDACT_VALUES` | *(empty)* | Extra comma-separated secret strings to scrub from logs, errors, and outputs |
 
+## Installing CLI Binaries in the Sidecar Image
+
+The base `Dockerfile` is intentionally minimal and does not bundle proprietary or third-party CLI packages by default. Pass `CLI_BRIDGE_NPM_PACKAGES` at build time (or point `CLI_BRIDGE_IMAGE` at a derived image) to install the CLIs you want enabled:
+
+```bash
+docker build \
+  --build-arg CLI_BRIDGE_NPM_PACKAGES="@anthropic-ai/claude-code @openai/codex @google/gemini-cli" \
+  -t local/pentagi-cli-bridge:workshop \
+  ./cli-bridge
+```
+
 ## Running Tests (100% Offline)
 
 ```bash

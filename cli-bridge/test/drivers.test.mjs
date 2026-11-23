@@ -88,7 +88,7 @@ test('claude, codex, gemini, and stdio-json drivers pass no-host-tool flags and 
       'fake-codex',
       `
       const args = process.argv.slice(2);
-      if (!args.includes('read-only')) process.exit(43);
+      if (!args.includes('read-only') || !args.includes('--skip-git-repo-check')) process.exit(43);
       process.stdin.resume();
       process.stdin.on('end', () => {
         process.stdout.write(JSON.stringify({ type: 'thread.started' }) + '\\n');

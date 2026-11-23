@@ -2,6 +2,14 @@ FROM node:24-alpine
 
 WORKDIR /app
 
+# Optional space-separated npm CLI packages to bake into a derived image
+# (e.g. --build-arg CLI_BRIDGE_NPM_PACKAGES="@anthropic-ai/claude-code @openai/codex @google/gemini-cli").
+# Left empty by default so base builds stay offline-friendly and minimal.
+ARG CLI_BRIDGE_NPM_PACKAGES=""
+RUN if [ -n "$CLI_BRIDGE_NPM_PACKAGES" ]; then \
+      npm install -g --no-audit --no-fund $CLI_BRIDGE_NPM_PACKAGES; \
+    fi
+
 # Keep application source owned by root:root (read-only to the runtime node user).
 COPY package.json ./
 COPY src ./src

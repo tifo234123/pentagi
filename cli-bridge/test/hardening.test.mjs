@@ -218,7 +218,7 @@ test('HTTP server handles malformed URLs safely, enforces auth on unprefixed rou
       const prompt = Buffer.concat(chunks).toString('utf8');
       if (prompt.includes('STREAM_TOOL')) {
         process.stdout.write(JSON.stringify({
-          result: JSON.stringify({ content: null, tool_calls: [{ name: 'done', arguments: { result: 'ok with red-secret-777' } }] }),
+          result: JSON.stringify({ content: null, tool_calls: [{ name: 'done', arguments: { result: 'ok with red-secret-777 and quote\\"slash\\\\tok' } }] }),
           usage: { input_tokens: 21, output_tokens: 9 }
         }));
         return;
@@ -236,7 +236,7 @@ test('HTTP server handles malformed URLs safely, enforces auth on unprefixed rou
     CLI_BRIDGE_API_KEY: 'bridge-key-1234',
     CLI_BRIDGE_ENABLED_DRIVERS: 'claude',
     CLI_BRIDGE_CLAUDE_BIN: fakeClaude,
-    CLI_BRIDGE_REDACT_VALUES: 'red-secret-777',
+    CLI_BRIDGE_REDACT_VALUES: 'red-secret-777,quote"slash\\tok',
   });
   const app = createBridgeApp(cfg, { logger: { error() {}, log() {} } });
   await new Promise((resolve) => app.server.listen(0, '127.0.0.1', resolve));
@@ -278,6 +278,7 @@ test('HTTP server handles malformed URLs safely, enforces auth on unprefixed rou
     assert.match(sseToolText, /"tool_calls":\[\{"index":0,"id":"call_000001"/);
     assert.match(sseToolText, /"usage":\{"prompt_tokens":21,"completion_tokens":9,"total_tokens":30\}/);
     assert.doesNotMatch(sseToolText, /red-secret-777/);
+    assert.doesNotMatch(sseToolText, /quote/);
     assert.match(sseToolText, /\[REDACTED\]/);
 
     // 4. SSE emoji streaming preserves 4-byte code points without lone-surrogate corruption

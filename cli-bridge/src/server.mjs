@@ -109,6 +109,15 @@ function sendJson(res, status, payload, extraHeaders = {}) {
   res.end(JSON.stringify(payload));
 }
 
+function redactJsonArguments(rawArgs, redactor) {
+  try {
+    const parsed = JSON.parse(rawArgs);
+    return redactor.redact(JSON.stringify(redactor.redact(parsed)));
+  } catch {
+    return redactor.redact(rawArgs);
+  }
+}
+
 function redactParsedOutput(parsed, redactor) {
   return {
     ...parsed,
@@ -117,7 +126,7 @@ function redactParsedOutput(parsed, redactor) {
       ...tc,
       function: {
         ...tc.function,
-        arguments: redactor.redact(tc.function.arguments),
+        arguments: redactJsonArguments(tc.function.arguments, redactor),
       },
     })),
   };

@@ -15,9 +15,18 @@ export function createCodexDriver(config, runner = runSubprocess) {
     defaultModel: models[0],
     models,
     async invoke({ model, prompt, signal }) {
-      // --sandbox read-only blocks filesystem writes. Run inside the isolated cli-bridge
-      // container with an empty workDir and no mounted host credentials.
-      const args = ['exec', '--sandbox', 'read-only', '--json', '--model', model, '-'];
+      // --sandbox read-only blocks filesystem writes; --skip-git-repo-check lets codex
+      // run inside the empty /work tmpfs container without requiring a git repository.
+      const args = [
+        'exec',
+        '--sandbox',
+        'read-only',
+        '--skip-git-repo-check',
+        '--json',
+        '--model',
+        model,
+        '-',
+      ];
 
       const { stdout } = await runner({
         binary: config.binaries.codex,
