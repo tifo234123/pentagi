@@ -42,7 +42,7 @@ services:
       - CLI_BRIDGE_KILL_GRACE_MS=${CLI_BRIDGE_KILL_GRACE_MS:-2000}
       - CLI_BRIDGE_MAX_OUTPUT_BYTES=${CLI_BRIDGE_MAX_OUTPUT_BYTES:-1048576}
       - CLI_BRIDGE_MAX_REQUEST_BYTES=${CLI_BRIDGE_MAX_REQUEST_BYTES:-2097152}
-      - CLI_BRIDGE_MAX_CONCURRENT=${CLI_BRIDGE_MAX_CONCURRENT:-4}
+      - CLI_BRIDGE_MAX_CONCURRENT=${CLI_BRIDGE_MAX_CONCURRENT:-8}
       - CLI_BRIDGE_CLAUDE_BIN=${CLI_BRIDGE_CLAUDE_BIN:-claude}
       - CLI_BRIDGE_CODEX_BIN=${CLI_BRIDGE_CODEX_BIN:-codex}
       - CLI_BRIDGE_GEMINI_BIN=${CLI_BRIDGE_GEMINI_BIN:-gemini}
@@ -53,6 +53,10 @@ services:
       - CLI_BRIDGE_STDIO_JSON_MODELS=${CLI_BRIDGE_STDIO_JSON_MODELS:-default}
       - CLI_BRIDGE_REDACT_VALUES=${CLI_BRIDGE_REDACT_VALUES:-}
       - CLI_BRIDGE_WORK_DIR=/work
+      # Optional provider API keys for containerized CLI execution (leave blank if unused).
+      - ANTHROPIC_API_KEY=${CLI_BRIDGE_ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${CLI_BRIDGE_OPENAI_API_KEY:-}
+      - GEMINI_API_KEY=${CLI_BRIDGE_GEMINI_API_KEY:-}
     networks:
       - pentagi-network
 
@@ -60,8 +64,10 @@ services:
     depends_on:
       cli-bridge:
         condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
-      - LLM_SERVER_URL=http://cli-bridge:8090/v1
+      - LLM_SERVER_URL=${CLI_BRIDGE_URL:-http://cli-bridge:8090/v1}
       - LLM_SERVER_KEY=${CLI_BRIDGE_API_KEY:?CLI_BRIDGE_API_KEY must be set in your workshop env file}
       - LLM_SERVER_MODEL=${CLI_BRIDGE_DEFAULT_MODEL:-claude/sonnet}
       - LLM_SERVER_CONFIG_PATH=/opt/pentagi/conf/custom.provider.yml
