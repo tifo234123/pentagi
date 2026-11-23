@@ -1,0 +1,14 @@
+{
+  "name": "pentagi-cli-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "T3-Code-inspired opt-in multi-CLI LLM bridge for PentAGI Custom Provider",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "start": "node src/index.mjs",
+    "test": "node --test test/*.test.mjs"
+  }
+}
