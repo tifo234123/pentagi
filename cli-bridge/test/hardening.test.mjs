@@ -10,6 +10,7 @@ import { BridgeError, buildSafeChildEnv, runSubprocess } from '../src/drivers/ba
 import { createClaudeDriver } from '../src/drivers/claude.mjs';
 import { createCodexDriver } from '../src/drivers/codex.mjs';
 import { createGeminiDriver } from '../src/drivers/gemini.mjs';
+import { createOpencodeDriver } from '../src/drivers/opencode.mjs';
 import { createStdioJsonDriver } from '../src/drivers/stdio-json.mjs';
 import { buildBridgePrompt, createCallIdGenerator, parseCliModelOutput } from '../src/protocol.mjs';
 import { createBridgeApp } from '../src/server.mjs';
@@ -172,6 +173,59 @@ test('driver error envelopes (claude is_error, codex turn.failed, gemini prelude
     });
     const parsedStdio = parseCliModelOutput(stdioOut, [], createCallIdGenerator());
     assert.equal(parsedStdio.content, 'from text field');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('opencode error envelope, empty JSONL, and slash model argv are handled cleanly', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cli-bridge-opencode-'));
+  try {
+    const opencodeErr = makeFakeBinary(
+      dir,
+      'opencode-err',
+      `
+      const chunks = [];
+      process.stdin.on('data', (c) => chunks.push(c));
+      process.stdin.on('end', () => {
+        const required = ['run', '--format', 'json', '--archived', '--agent', 'plan', '--model'];
+        if (!required.every((flag) => process.argv.includes(flag))) process.exit(45);
+        const model = process.argv[process.argv.indexOf('--model') + 1];
+        if (model !== 'opencode-go/gpt-5.6-luna') process.exit(46);
+        if (process.argv.includes('Reply with ONLY OK')) process.exit(47);
+        if (Buffer.concat(chunks).toString('utf8') !== 'Reply with ONLY OK') process.exit(48);
+        process.stdout.write(JSON.stringify({ type: 'text', part: { type: 'text', text: 'partial' } }) + '\\n');
+        process.stdout.write(JSON.stringify({ type: 'error', error: { type: 'ProviderAuthError', message: 'opencode auth expired' } }) + '\\n');
+      });
+      `
+    );
+    const opencodeEmpty = makeFakeBinary(
+      dir,
+      'opencode-empty',
+      `process.stdout.write(JSON.stringify({ type: 'step_finish', part: { reason: 'stop', tokens: { input: 1, output: 0, cache: { read: 2, write: 0 } } } }) + '\\n');`
+    );
+
+    const cfg = loadConfig({
+      CLI_BRIDGE_ENABLED_DRIVERS: 'opencode',
+      CLI_BRIDGE_OPENCODE_BIN: opencodeErr,
+      CLI_BRIDGE_OPENCODE_MODELS: 'opencode-go/gpt-5.6-luna',
+    });
+
+    await assert.rejects(
+      () => createOpencodeDriver(cfg).invoke({ model: 'opencode-go/gpt-5.6-luna', prompt: 'Reply with ONLY OK' }),
+      (err) =>
+        err instanceof BridgeError &&
+        err.status === 502 &&
+        err.code === 'cli_driver_error' &&
+        err.type === 'server_error' &&
+        /opencode auth expired/.test(err.message)
+    );
+
+    const cfgEmpty = { ...cfg, binaries: { ...cfg.binaries, opencode: opencodeEmpty } };
+    await assert.rejects(
+      () => createOpencodeDriver(cfgEmpty).invoke({ model: 'opencode-go/gpt-5.6-luna', prompt: 'hi' }),
+      (err) => err instanceof BridgeError && err.status === 502 && err.code === 'malformed_cli_output'
+    );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -9,6 +9,7 @@ import { BridgeError, DriverRegistry, assertSafeModelName, runSubprocess } from 
 import { createClaudeDriver } from '../src/drivers/claude.mjs';
 import { createCodexDriver } from '../src/drivers/codex.mjs';
 import { createGeminiDriver } from '../src/drivers/gemini.mjs';
+import { createOpencodeDriver } from '../src/drivers/opencode.mjs';
 import { createStdioJsonDriver } from '../src/drivers/stdio-json.mjs';
 
 function makeFakeBinary(dir, name, jsBody) {
@@ -181,6 +182,106 @@ test('claude, codex, gemini, and stdio-json drivers pass no-host-tool flags and 
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('opencode driver strips the driver prefix, passes plan-mode args, concatenates text, and sums cache tokens', async () => {
+  const cfg = loadConfig({
+    CLI_BRIDGE_ENABLED_DRIVERS: 'opencode',
+    CLI_BRIDGE_OPENCODE_BIN: '/usr/bin/opencode',
+    CLI_BRIDGE_OPENCODE_MODELS: 'opencode-go/gpt-5.6-luna,opencode-go/claude-haiku-5-5',
+    CLI_BRIDGE_WORK_DIR: '/work',
+    CLI_BRIDGE_TIMEOUT_MS: '90000',
+    CLI_BRIDGE_KILL_GRACE_MS: '1500',
+    CLI_BRIDGE_MAX_OUTPUT_BYTES: '65536',
+  });
+  assert.equal(cfg.binaries.opencode, '/usr/bin/opencode');
+  assert.deepEqual(cfg.models.opencode, ['opencode-go/gpt-5.6-luna', 'opencode-go/claude-haiku-5-5']);
+
+  const registry = new DriverRegistry(cfg, [createOpencodeDriver(cfg)]);
+  const resolved = registry.resolve('opencode/opencode-go/gpt-5.6-luna');
+  assert.equal(resolved.driver.id, 'opencode');
+  assert.equal(resolved.model, 'opencode-go/gpt-5.6-luna');
+  assert.equal(resolved.qualifiedModel, 'opencode/opencode-go/gpt-5.6-luna');
+  assert.equal(assertSafeModelName(resolved.model), 'opencode-go/gpt-5.6-luna');
+
+  const listed = registry.listModels().map((m) => m.id);
+  assert.deepEqual(listed, [
+    'opencode/opencode-go/gpt-5.6-luna',
+    'opencode/opencode-go/claude-haiku-5-5',
+  ]);
+
+  const ac = new AbortController();
+  let captured;
+  const runner = async (opts) => {
+    captured = opts;
+    return {
+      stdout: [
+        'not-json preamble',
+        JSON.stringify({ type: 'text', part: { type: 'text', text: 'Hel' } }),
+        JSON.stringify({ type: 'text', part: { type: 'text', text: 'lo ' } }),
+        JSON.stringify({
+          type: 'step_finish',
+          part: {
+            reason: 'stop',
+            tokens: { input: 4, output: 9, reasoning: 3, cache: { read: 13217, write: 249 } },
+          },
+        }),
+        JSON.stringify({
+          type: 'step_finish',
+          part: { reason: 'stop', tokens: { input: 1, output: 2, cache: { read: 3, write: 4 } } },
+        }),
+      ].join('\n'),
+      stderr: '',
+      code: 0,
+    };
+  };
+
+  const out = await createOpencodeDriver(cfg, runner).invoke({
+    model: resolved.model,
+    prompt: 'Reply with ONLY OK',
+    signal: ac.signal,
+  });
+
+  assert.equal(captured.binary, '/usr/bin/opencode');
+  assert.deepEqual(captured.args, [
+    'run',
+    '--format',
+    'json',
+    '--archived',
+    '--agent',
+    'plan',
+    '--model',
+    'opencode-go/gpt-5.6-luna',
+  ]);
+  assert.equal(captured.stdin, 'Reply with ONLY OK');
+  assert.equal(captured.args.includes('Reply with ONLY OK'), false);
+  assert.equal(captured.cwd, '/work');
+  assert.equal(captured.timeoutMs, 90_000);
+  assert.equal(captured.killGraceMs, 1_500);
+  assert.equal(captured.maxOutputBytes, 65_536);
+  assert.equal(captured.signal, ac.signal);
+  assert.equal(out.text, 'Hello ');
+  // reasoning is not completion; prompt tokens are input + cache.read + cache.write, summed across steps.
+  assert.equal(out.usage.prompt_tokens, 4 + 13217 + 249 + 1 + 3 + 4);
+  assert.equal(out.usage.completion_tokens, 11);
+
+  const defaults = createOpencodeDriver(loadConfig({ CLI_BRIDGE_ENABLED_DRIVERS: 'opencode' }));
+  assert.equal(defaults.defaultModel, 'opencode-go/gpt-5.6-luna');
+  assert.deepEqual(defaults.models, [
+    'opencode-go/gpt-5.6-luna',
+    'opencode-go/claude-haiku-5-5',
+    'opencode-go/deepseek-v4-pro',
+    'opencode-go/kimi-k3',
+  ]);
+  assert.equal(defaults.modelLimits.contextWindow, 200_000);
+  assert.equal(defaults.modelLimits.maxOutputTokens, 32_768);
+
+  const plain = await createOpencodeDriver(cfg, async () => ({ stdout: '  plain fallback  \n', stderr: '', code: 0 })).invoke({
+    model: 'opencode-go/claude-haiku-5-5',
+    prompt: 'hi',
+  });
+  assert.equal(plain.text, 'plain fallback');
+  assert.equal(plain.usage, undefined);
 });
 
 test('runSubprocess enforces timeout, AbortSignal cancellation, output limit, and missing binary errors', async () => {

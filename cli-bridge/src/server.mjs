@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import { createClaudeDriver } from './drivers/claude.mjs';
 import { createCodexDriver } from './drivers/codex.mjs';
 import { createGeminiDriver } from './drivers/gemini.mjs';
+import { createOpencodeDriver } from './drivers/opencode.mjs';
 import { createStdioJsonDriver } from './drivers/stdio-json.mjs';
 import { BridgeError, DriverRegistry } from './drivers/base.mjs';
 import {
@@ -138,6 +139,7 @@ export function createBridgeApp(config, { runner, logger = console } = {}) {
     createClaudeDriver(config, runner),
     createCodexDriver(config, runner),
     createGeminiDriver(config, runner),
+    createOpencodeDriver(config, runner),
     createStdioJsonDriver(config, runner),
   ];
   const registry = new DriverRegistry(config, drivers);
