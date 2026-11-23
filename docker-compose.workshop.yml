@@ -1,4 +1,4 @@
-# Isolated workshop development stack overlay for PentAGI.
+# Isolated workshop development stack overlay for PentAGI (requires Docker Compose v2.24.4+ for `ports: !override`).
 # Runs safely beside a live /home/abderrahman/pentagi installation with zero collisions:
 #   - Dedicated Compose project name (`-p pentagi-workshop`)
 #   - Distinct container names, all three base network names, host ports, and tenant ID

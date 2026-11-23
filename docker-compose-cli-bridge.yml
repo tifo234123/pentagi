@@ -13,6 +13,8 @@ services:
     build:
       context: ./cli-bridge
       dockerfile: Dockerfile
+      args:
+        CLI_BRIDGE_NPM_PACKAGES: ${CLI_BRIDGE_NPM_PACKAGES:-}
     image: ${CLI_BRIDGE_IMAGE:-local/pentagi-cli-bridge:workshop}
     container_name: ${CLI_BRIDGE_CONTAINER_NAME:-pentagi-workshop-cli-bridge}
     restart: unless-stopped
@@ -21,7 +23,8 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=128m,mode=1777
-      - /work:size=128m,mode=0755
+      - /work:size=128m,uid=1000,gid=1000,mode=0755
+      - /home/node:size=64m,uid=1000,gid=1000,mode=0700
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -29,9 +32,10 @@ services:
     expose:
       - "8090/tcp"
     environment:
+      - HOME=/home/node
       - CLI_BRIDGE_HOST=0.0.0.0
       - CLI_BRIDGE_PORT=8090
-      - CLI_BRIDGE_API_KEY=${CLI_BRIDGE_API_KEY:-workshop-cli-bridge-token}
+      - CLI_BRIDGE_API_KEY=${CLI_BRIDGE_API_KEY:?CLI_BRIDGE_API_KEY must be set in your workshop env file}
       - CLI_BRIDGE_ENABLED_DRIVERS=${CLI_BRIDGE_ENABLED_DRIVERS:-}
       - CLI_BRIDGE_DEFAULT_DRIVER=${CLI_BRIDGE_DEFAULT_DRIVER:-}
       - CLI_BRIDGE_TIMEOUT_MS=${CLI_BRIDGE_TIMEOUT_MS:-120000}
@@ -58,7 +62,7 @@ services:
         condition: service_healthy
     environment:
       - LLM_SERVER_URL=http://cli-bridge:8090/v1
-      - LLM_SERVER_KEY=${CLI_BRIDGE_API_KEY:-workshop-cli-bridge-token}
+      - LLM_SERVER_KEY=${CLI_BRIDGE_API_KEY:?CLI_BRIDGE_API_KEY must be set in your workshop env file}
       - LLM_SERVER_MODEL=${CLI_BRIDGE_DEFAULT_MODEL:-claude/sonnet}
       - LLM_SERVER_CONFIG_PATH=/opt/pentagi/conf/custom.provider.yml
     volumes:

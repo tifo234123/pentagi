@@ -20,7 +20,7 @@ This guide explains how to run an isolated PentAGI workshop instance alongside a
 cp examples/env.workshop.example .env.workshop
 ```
 
-Edit `.env.workshop` to set a unique `WORKSHOP_COOKIE_SIGNING_SALT`, `CLI_BRIDGE_API_KEY`, and your allowlisted `CLI_BRIDGE_ENABLED_DRIVERS`. Never point `--env-file` at your live installation's `.env`.
+Edit `.env.workshop` to set a unique `WORKSHOP_COOKIE_SIGNING_SALT`, a required `CLI_BRIDGE_API_KEY`, your allowlisted `CLI_BRIDGE_ENABLED_DRIVERS`, and optionally `CLI_BRIDGE_NPM_PACKAGES` (e.g. `@anthropic-ai/claude-code @openai/codex @google/gemini-cli`) to install CLI binaries into the sidecar image at build time (or point `CLI_BRIDGE_IMAGE` at your own derived image and mount only the specific CLI credential files required under `/home/node`). Requires Docker Compose v2.24.4+ (`ports: !override`). Never point `--env-file` at your live installation's `.env`.
 
 ## 2. Validate Rendered Compose Configuration
 
