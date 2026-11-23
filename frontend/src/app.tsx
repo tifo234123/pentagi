@@ -37,6 +37,7 @@ import { VersionInfoProvider } from '@/providers/version-info-provider';
 
 import { SystemSettingsProvider } from './providers/system-settings-provider';
 
+const AgentMode = lazy(() => import('@/pages/agent-mode/agent-mode'));
 const Dashboard = lazy(() => import('@/pages/dashboard/dashboard'));
 const Flow = lazy(() => import('@/pages/flows/flow'));
 const FlowReport = lazy(() => import('@/pages/flows/flow-report'));
@@ -159,6 +160,11 @@ const router = createBrowserRouter(
                             element={<FlowWithProvider />}
                             handle={routeTitles.flow}
                             path="flows/:flowId"
+                        />
+                        <Route
+                            element={<AgentMode />}
+                            handle={routeTitles.agentMode}
+                            path="agent-mode"
                         />
                     </Route>
 

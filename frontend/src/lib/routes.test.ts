@@ -6,6 +6,7 @@ import { routes } from './routes';
 // Mirrors the absolute route patterns from app.tsx; keep in sync when routes change there.
 const builtUrlToPattern: [string, string][] = [
     [routes.dashboard, '/dashboard'],
+    [routes.agentMode, '/agent-mode'],
     [routes.flows, '/flows'],
     [routes.newFlow, '/flows/new'],
     [routes.flow('abc'), '/flows/:flowId'],

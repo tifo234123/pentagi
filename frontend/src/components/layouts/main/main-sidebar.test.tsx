@@ -132,6 +132,14 @@ describe('MainSidebar settings entry points', () => {
     });
 });
 
+describe('MainSidebar Agent Mode entry', () => {
+    it('links to the Agent Mode page', () => {
+        renderSidebar();
+
+        expect(screen.getByRole('link', { name: 'Agent Mode' })).toHaveAttribute('href', '/agent-mode');
+    });
+});
+
 describe('MainSidebar rows that carry an action', () => {
     it('marks the row so its label keeps clear of the action button', () => {
         renderSidebar();

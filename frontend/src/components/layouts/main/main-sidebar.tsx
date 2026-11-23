@@ -1,5 +1,6 @@
 import { Avatar, AvatarFallback } from '@radix-ui/react-avatar';
 import {
+    Bot,
     ChevronsUpDown,
     Clock,
     FileText,
@@ -69,6 +70,7 @@ export function MainSidebar() {
     const location = useLocation();
     const isDashboardActive = useMatch('/dashboard');
     const isFlowsActive = useMatch('/flows/*');
+    const isAgentModeActive = useMatch('/agent-mode/*');
     const isTemplatesActive = useMatch('/templates/*');
     const isKnowledgesActive = useMatch('/knowledges/*');
     const isResourcesActive = useMatch('/resources/*');
@@ -159,6 +161,17 @@ export function MainSidebar() {
                                         <Plus />
                                     </Link>
                                 </SidebarMenuAction>
+                            </SidebarMenuItem>
+                            <SidebarMenuItem>
+                                <SidebarMenuButton
+                                    asChild
+                                    isActive={!!isAgentModeActive}
+                                >
+                                    <Link to={routes.agentMode}>
+                                        <Bot />
+                                        Agent Mode
+                                    </Link>
+                                </SidebarMenuButton>
                             </SidebarMenuItem>
                             <SidebarMenuItem>
                                 <SidebarMenuButton

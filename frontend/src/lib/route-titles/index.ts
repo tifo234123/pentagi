@@ -35,6 +35,7 @@ export type TitleResolver = ((params: RouteParams) => string) | ComponentType<{ 
  */
 export const routeTitles = {
     account: { title: 'Account' },
+    agentMode: { title: 'Agent Mode' },
     apiTokens: { title: 'API Tokens' },
     dashboard: { title: 'Dashboard' },
     flow: {
