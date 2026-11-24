@@ -82,6 +82,24 @@ test('buildBridgePayload separates verbatim system prompt, nonce-fences tool out
   });
   assert.equal(barrierAuto.jsonSchema.properties.tool_calls.minItems, 1);
 
+  const sampling = buildBridgePayload({
+    messages: [
+      { role: 'system', content: 'Sample tool-call IDs.' },
+      { role: 'user', content: 'Call the test_tool tool.' },
+    ],
+    tools: [
+      {
+        type: 'function',
+        function: { name: 'test_tool', description: 'sample', parameters: { type: 'object', properties: {} } },
+      },
+    ],
+    toolChoice: 'auto',
+  });
+  assert.match(sampling.systemPrompt, /MUST respond ONLY with a single raw JSON object/);
+  assert.match(sampling.systemPrompt, /no markdown or prose outside that JSON/);
+  assert.match(sampling.systemPrompt, /MUST emit a tool call in "tool_calls" whenever the prompt asks to call a tool/);
+  assert.equal(sampling.jsonSchema.properties.tool_calls.minItems, undefined);
+
   // Single-turn utility prompts with no system message and no tools skip XML nonce fencing
   const utility = buildBridgePayload({
     messages: [{ role: 'user', content: 'Pick a concise 4-word title for this flow.' }],

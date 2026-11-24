@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { request as httpRequest } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -181,19 +181,32 @@ test('driver error envelopes (claude is_error, codex turn.failed, gemini prelude
 test('opencode error envelope, empty JSONL, and slash model argv are handled cleanly', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'cli-bridge-opencode-'));
   try {
+    const seenPathFile = join(dir, 'seen-prompt-path');
     const opencodeErr = makeFakeBinary(
       dir,
       'opencode-err',
       `
+      const fs = require('node:fs');
       const chunks = [];
       process.stdin.on('data', (c) => chunks.push(c));
       process.stdin.on('end', () => {
-        const required = ['run', '--format', 'json', '--archived', '--agent', 'plan', '--model'];
+        const required = ['run', '--standalone', '--format', 'json', '--archived', '--agent', 'pentagi', '--model'];
         if (!required.every((flag) => process.argv.includes(flag))) process.exit(45);
+        if (process.argv.includes('plan')) process.exit(49);
         const model = process.argv[process.argv.indexOf('--model') + 1];
         if (model !== 'opencode-go/gpt-5.6-luna') process.exit(46);
-        if (process.argv.includes('Reply with ONLY OK')) process.exit(47);
-        if (Buffer.concat(chunks).toString('utf8') !== 'Reply with ONLY OK') process.exit(48);
+        if (process.argv.includes('Reply with ONLY OK') || process.argv.includes('verbatim-system')) process.exit(47);
+        if (Buffer.concat(chunks).toString('utf8') !== 'user-turn') process.exit(48);
+        if (process.env.CLI_BRIDGE_API_KEY) process.exit(50);
+        const cfg = JSON.parse(process.env.OPENCODE_CONFIG_CONTENT || '');
+        if (!cfg.agent || !cfg.agent.pentagi || cfg.agent.pentagi.tools['*'] !== false) process.exit(51);
+        const prompt = cfg.agent.pentagi.prompt;
+        if (!prompt.startsWith('{file:') || !prompt.endsWith('}')) process.exit(52);
+        const promptPath = prompt.slice('{file:'.length, -1);
+        if (fs.readFileSync(promptPath, 'utf8') !== 'verbatim-system') process.exit(53);
+        if ((fs.statSync(promptPath).mode & 0o777) !== 0o600) process.exit(54);
+        if (process.env.OPENCODE_CONFIG_CONTENT.includes('verbatim-system')) process.exit(55);
+        fs.writeFileSync(${JSON.stringify(seenPathFile)}, promptPath);
         process.stdout.write(JSON.stringify({ type: 'text', part: { type: 'text', text: 'partial' } }) + '\\n');
         process.stdout.write(JSON.stringify({ type: 'error', error: { type: 'ProviderAuthError', message: 'opencode auth expired' } }) + '\\n');
       });
@@ -211,15 +224,30 @@ test('opencode error envelope, empty JSONL, and slash model argv are handled cle
       CLI_BRIDGE_OPENCODE_MODELS: 'opencode-go/gpt-5.6-luna',
     });
 
-    await assert.rejects(
-      () => createOpencodeDriver(cfg).invoke({ model: 'opencode-go/gpt-5.6-luna', prompt: 'Reply with ONLY OK' }),
-      (err) =>
-        err instanceof BridgeError &&
-        err.status === 502 &&
-        err.code === 'cli_driver_error' &&
-        err.type === 'server_error' &&
-        /opencode auth expired/.test(err.message)
-    );
+    const previousKey = process.env.CLI_BRIDGE_API_KEY;
+    process.env.CLI_BRIDGE_API_KEY = 'should-not-leak';
+    try {
+      await assert.rejects(
+        () =>
+          createOpencodeDriver(cfg).invoke({
+            model: 'opencode-go/gpt-5.6-luna',
+            prompt: 'Reply with ONLY OK',
+            systemPrompt: 'verbatim-system',
+            userPrompt: 'user-turn',
+          }),
+        (err) =>
+          err instanceof BridgeError &&
+          err.status === 502 &&
+          err.code === 'cli_driver_error' &&
+          err.type === 'server_error' &&
+          /opencode auth expired/.test(err.message)
+      );
+    } finally {
+      if (previousKey === undefined) delete process.env.CLI_BRIDGE_API_KEY;
+      else process.env.CLI_BRIDGE_API_KEY = previousKey;
+    }
+    const seenPromptPath = readFileSync(seenPathFile, 'utf8');
+    assert.equal(existsSync(seenPromptPath), false);
 
     const cfgEmpty = { ...cfg, binaries: { ...cfg.binaries, opencode: opencodeEmpty } };
     await assert.rejects(

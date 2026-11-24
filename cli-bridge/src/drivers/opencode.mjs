@@ -1,3 +1,8 @@
+import { randomBytes } from 'node:crypto';
+import { rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { BridgeError, runSubprocess } from './base.mjs';
 
 const DEFAULT_MODELS = [
@@ -31,22 +36,63 @@ export function createOpencodeDriver(config, runner = runSubprocess) {
       contextWindow: 200_000,
       maxOutputTokens: 32_768,
     },
-    async invoke({ model, prompt, signal }) {
-      // Prompt is stdin-only so it never lands in argv. --archived keeps bridge turns out of
-      // the user's session list. --agent plan is read-only so OpenCode cannot mutate host
-      // files outside PentAGI's sandbox.
-      const args = ['run', '--format', 'json', '--archived', '--agent', 'plan', '--model', model];
+    async invoke({ model, prompt, systemPrompt, userPrompt, signal }) {
+      // OpenCode's built-in `plan` agent injects a ~25k-token coding-assistant prompt that
+      // overrides PentAGI and disables tool-call JSON. A standalone primary agent with every
+      // host tool disabled replaces that prompt. `{file:}` (verified on opencode v2.3.2) keeps
+      // the system prompt out of argv and out of the child environment, which is world-readable
+      // via /proc/<pid>/environ and capped by MAX_ARG_STRLEN.
+      const args = ['run', '--standalone', '--format', 'json', '--archived', '--agent', 'pentagi', '--model', model];
 
-      const { stdout } = await runner({
-        binary: config.binaries.opencode,
-        args,
-        stdin: prompt,
-        cwd: config.workDir,
-        timeoutMs: config.timeoutMs,
-        killGraceMs: config.killGraceMs,
-        maxOutputBytes: config.maxOutputBytes,
-        signal,
-      });
+      const deliverSystem = typeof systemPrompt === 'string' && systemPrompt.trim().length > 0;
+      let promptFile = null;
+      let agentPrompt = 'Follow the user message. Do not use host tools.';
+      if (deliverSystem) {
+        promptFile = join(tmpdir(), `cli-bridge-oc-${randomBytes(8).toString('hex')}.txt`);
+        agentPrompt = `{file:${promptFile}}`;
+      }
+
+      const agentConfig = {
+        permission: 'deny',
+        agent: {
+          pentagi: {
+            description: 'PentAGI reasoning bridge',
+            mode: 'primary',
+            prompt: agentPrompt,
+            tools: { '*': false },
+            permission: { '*': 'deny' },
+          },
+        },
+      };
+
+      const stdinPayload =
+        deliverSystem && typeof userPrompt === 'string' && userPrompt.trim() ? userPrompt : prompt;
+
+      let stdout;
+      try {
+        if (promptFile) {
+          writeFileSync(promptFile, systemPrompt, { encoding: 'utf8', mode: 0o600 });
+        }
+        ({ stdout } = await runner({
+          binary: config.binaries.opencode,
+          args,
+          stdin: stdinPayload,
+          cwd: config.workDir,
+          env: { ...process.env, OPENCODE_CONFIG_CONTENT: JSON.stringify(agentConfig) },
+          timeoutMs: config.timeoutMs,
+          killGraceMs: config.killGraceMs,
+          maxOutputBytes: config.maxOutputBytes,
+          signal,
+        }));
+      } finally {
+        if (promptFile) {
+          try {
+            rmSync(promptFile, { force: true });
+          } catch {
+            // Best-effort temp cleanup.
+          }
+        }
+      }
 
       const lines = stdout
         .split(/\r?\n/)

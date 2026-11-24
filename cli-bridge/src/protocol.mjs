@@ -209,6 +209,10 @@ export function buildBridgePayload({
     }));
 
     const hasBarrierTool = schemaBlocks.some((t) => PENTAGI_STRICT_BARRIER_TOOLS.has(t.name));
+    // OpenCode and Gemini have no --json-schema channel. This sentence is the only thing that
+    // stops a sampling probe (toolChoice auto, no barrier tool) from answering in prose.
+    const rawJsonOnly =
+      'You MUST respond ONLY with a single raw JSON object {"content": string | null, "tool_calls": [{"name": "<tool_name>", "arguments": { ... }}]} and no markdown or prose outside that JSON. You MUST emit a tool call in "tool_calls" whenever the prompt asks to call a tool.';
     let choiceInstruction = hasBarrierTool
       ? 'You MUST return at least one valid tool call in "tool_calls" (never return an empty "tool_calls" array when completing or advancing a PentAGI task).'
       : 'Follow the system prompt tool rules strictly: call the required tool(s) in "tool_calls" whenever an action or completion is needed, and only return plain text in "content" with an empty "tool_calls" array when no tool call is appropriate.';
@@ -217,6 +221,7 @@ export function buildBridgePayload({
     } else if (toolChoice && typeof toolChoice === 'object' && toolChoice.function?.name) {
       choiceInstruction = `You MUST call the tool named "${toolChoice.function.name}".`;
     }
+    choiceInstruction = `${choiceInstruction} ${rawJsonOnly}`;
 
     jsonSchema = buildToolEnvelopeSchema(tools, toolChoice, { stringArguments: false });
     strictJsonSchema = buildToolEnvelopeSchema(tools, toolChoice, { stringArguments: true });

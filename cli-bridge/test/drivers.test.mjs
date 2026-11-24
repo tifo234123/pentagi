@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -184,7 +184,7 @@ test('claude, codex, gemini, and stdio-json drivers pass no-host-tool flags and 
   }
 });
 
-test('opencode driver strips the driver prefix, passes plan-mode args, concatenates text, and sums cache tokens', async () => {
+test('opencode driver strips the driver prefix, uses the pentagi agent, concatenates text, and sums cache tokens', async () => {
   const cfg = loadConfig({
     CLI_BRIDGE_ENABLED_DRIVERS: 'opencode',
     CLI_BRIDGE_OPENCODE_BIN: '/usr/bin/opencode',
@@ -212,8 +212,16 @@ test('opencode driver strips the driver prefix, passes plan-mode args, concatena
 
   const ac = new AbortController();
   let captured;
+  let seenPromptPath;
+  const systemPrompt = 'PentAGI verbatim system prompt';
   const runner = async (opts) => {
     captured = opts;
+    const agentConfig = JSON.parse(opts.env.OPENCODE_CONFIG_CONTENT);
+    const promptRef = agentConfig.agent.pentagi.prompt;
+    assert.match(promptRef, /^\{file:.+\}$/);
+    seenPromptPath = promptRef.slice('{file:'.length, -1);
+    assert.equal(readFileSync(seenPromptPath, 'utf8'), systemPrompt);
+    assert.equal(statSync(seenPromptPath).mode & 0o777, 0o600);
     return {
       stdout: [
         'not-json preamble',
@@ -239,22 +247,31 @@ test('opencode driver strips the driver prefix, passes plan-mode args, concatena
   const out = await createOpencodeDriver(cfg, runner).invoke({
     model: resolved.model,
     prompt: 'Reply with ONLY OK',
+    systemPrompt,
+    userPrompt: 'call the tool',
     signal: ac.signal,
   });
 
   assert.equal(captured.binary, '/usr/bin/opencode');
   assert.deepEqual(captured.args, [
     'run',
+    '--standalone',
     '--format',
     'json',
     '--archived',
     '--agent',
-    'plan',
+    'pentagi',
     '--model',
     'opencode-go/gpt-5.6-luna',
   ]);
-  assert.equal(captured.stdin, 'Reply with ONLY OK');
+  assert.equal(captured.stdin, 'call the tool');
   assert.equal(captured.args.includes('Reply with ONLY OK'), false);
+  assert.equal(captured.args.includes(systemPrompt), false);
+  const agentConfig = JSON.parse(captured.env.OPENCODE_CONFIG_CONTENT);
+  assert.equal(agentConfig.agent.pentagi.mode, 'primary');
+  assert.deepEqual(agentConfig.agent.pentagi.tools, { '*': false });
+  assert.equal(captured.env.OPENCODE_CONFIG_CONTENT.includes(systemPrompt), false);
+  assert.equal(existsSync(seenPromptPath), false);
   assert.equal(captured.cwd, '/work');
   assert.equal(captured.timeoutMs, 90_000);
   assert.equal(captured.killGraceMs, 1_500);
@@ -276,12 +293,38 @@ test('opencode driver strips the driver prefix, passes plan-mode args, concatena
   assert.equal(defaults.modelLimits.contextWindow, 200_000);
   assert.equal(defaults.modelLimits.maxOutputTokens, 32_768);
 
-  const plain = await createOpencodeDriver(cfg, async () => ({ stdout: '  plain fallback  \n', stderr: '', code: 0 })).invoke({
+  let plainOpts;
+  const plain = await createOpencodeDriver(cfg, async (opts) => {
+    plainOpts = opts;
+    return { stdout: '  plain fallback  \n', stderr: '', code: 0 };
+  }).invoke({
     model: 'opencode-go/claude-haiku-5-5',
     prompt: 'hi',
   });
   assert.equal(plain.text, 'plain fallback');
   assert.equal(plain.usage, undefined);
+  assert.equal(plainOpts.stdin, 'hi');
+  assert.equal(plainOpts.args.includes('--standalone'), true);
+  assert.equal(plainOpts.args.includes('pentagi'), true);
+  assert.deepEqual(JSON.parse(plainOpts.env.OPENCODE_CONFIG_CONTENT).agent.pentagi.tools, { '*': false });
+
+  let thrownPath;
+  await assert.rejects(
+    () =>
+      createOpencodeDriver(cfg, async (opts) => {
+        const ref = JSON.parse(opts.env.OPENCODE_CONFIG_CONTENT).agent.pentagi.prompt;
+        thrownPath = ref.slice('{file:'.length, -1);
+        assert.equal(existsSync(thrownPath), true);
+        throw new Error('runner failed');
+      }).invoke({
+        model: 'opencode-go/claude-haiku-5-5',
+        prompt: 'hi',
+        systemPrompt: 'cleanup-me',
+        userPrompt: 'turn',
+      }),
+    /runner failed/
+  );
+  assert.equal(existsSync(thrownPath), false);
 });
 
 test('runSubprocess enforces timeout, AbortSignal cancellation, output limit, and missing binary errors', async () => {
