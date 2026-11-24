@@ -7,7 +7,6 @@ import { FlowStatusIcon } from '@/components/icons/flow-status-icon';
 import { ProviderIcon } from '@/components/icons/provider-icon';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { StatusType } from '@/graphql/types';
 import { routes } from '@/lib/routes';
 import { cn } from '@/lib/utils';
@@ -108,23 +107,26 @@ function AgentModeRail({ activeFlowId, activeProviderName, onNavigate, onSelectP
                 <span>Threads</span>
                 <span className="font-mono">{threads.length}</span>
             </div>
-            <ScrollArea className="min-h-0 flex-1">
+            <div className="min-h-0 flex-1 overflow-y-auto">
                 {threads.length === 0 ? (
                     <p className="text-muted-foreground px-4 py-2 text-xs">No agent threads yet</p>
                 ) : (
                     <ul
                         aria-label="Agent threads"
-                        className="flex flex-col gap-0.5 p-2"
+                        className="flex min-w-0 flex-col gap-0.5 p-2"
                     >
                         {threads.map((flow) => {
                             const isCurrent = String(flow.id) === activeFlowId;
 
                             return (
-                                <li key={flow.id}>
+                                <li
+                                    className="min-w-0"
+                                    key={flow.id}
+                                >
                                     <Link
                                         aria-current={isCurrent ? 'page' : undefined}
                                         className={cn(
-                                            'hover:bg-accent group flex items-center gap-2 rounded-md px-2 py-1.5 text-sm',
+                                            'hover:bg-accent group flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-sm',
                                             isCurrent && 'bg-accent font-medium',
                                         )}
                                         onClick={onNavigate}
@@ -153,7 +155,7 @@ function AgentModeRail({ activeFlowId, activeProviderName, onNavigate, onSelectP
                         })}
                     </ul>
                 )}
-            </ScrollArea>
+            </div>
         </div>
     );
 }
