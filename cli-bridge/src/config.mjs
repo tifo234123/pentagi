@@ -1,4 +1,4 @@
-const KNOWN_DRIVERS = new Set(['claude', 'codex', 'gemini', 'stdio-json']);
+const KNOWN_DRIVERS = new Set(['claude', 'codex', 'gemini', 'opencode', 'stdio-json']);
 
 function parsePositiveInt(raw, fallback, { min = 1, max = Number.MAX_SAFE_INTEGER } = {}) {
   if (raw === undefined || raw === null || String(raw).trim() === '') {
@@ -76,6 +76,7 @@ export function loadConfig(env = process.env) {
     claude: (env.CLI_BRIDGE_CLAUDE_BIN || 'claude').trim(),
     codex: (env.CLI_BRIDGE_CODEX_BIN || 'codex').trim(),
     gemini: (env.CLI_BRIDGE_GEMINI_BIN || 'gemini').trim(),
+    opencode: (env.CLI_BRIDGE_OPENCODE_BIN || 'opencode').trim(),
     'stdio-json': (env.CLI_BRIDGE_STDIO_JSON_BIN || '').trim(),
   };
 
@@ -83,6 +84,7 @@ export function loadConfig(env = process.env) {
     claude: parseCsvList(env.CLI_BRIDGE_CLAUDE_MODELS),
     codex: parseCsvList(env.CLI_BRIDGE_CODEX_MODELS),
     gemini: parseCsvList(env.CLI_BRIDGE_GEMINI_MODELS),
+    opencode: parseCsvList(env.CLI_BRIDGE_OPENCODE_MODELS),
     'stdio-json': parseCsvList(env.CLI_BRIDGE_STDIO_JSON_MODELS),
   };
 
