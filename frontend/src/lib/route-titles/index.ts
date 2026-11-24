@@ -36,6 +36,14 @@ export type TitleResolver = ((params: RouteParams) => string) | ComponentType<{ 
 export const routeTitles = {
     account: { title: 'Account' },
     agentMode: { title: 'Agent Mode' },
+    agentModeSession: {
+        title: apolloTitle({
+            document: FlowDocument,
+            select: (data, { flowId }) =>
+                data?.flow?.title && flowId ? `Agent #${flowId} — ${data.flow.title}` : 'Agent Mode',
+            variables: ({ flowId }) => (flowId ? { id: flowId } : null),
+        }),
+    },
     apiTokens: { title: 'API Tokens' },
     dashboard: { title: 'Dashboard' },
     flow: {

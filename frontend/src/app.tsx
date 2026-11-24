@@ -57,6 +57,14 @@ const SettingsPrompts = lazy(() => import('@/pages/settings/settings-prompts'));
 const SettingsProvider = lazy(() => import('@/pages/settings/settings-provider'));
 const SettingsProviders = lazy(() => import('@/pages/settings/settings-providers'));
 
+function AgentModeSessionWithProvider() {
+    return (
+        <FlowProvider>
+            <AgentMode />
+        </FlowProvider>
+    );
+}
+
 function FlowWithProvider() {
     return (
         <FlowProvider>
@@ -165,6 +173,11 @@ const router = createBrowserRouter(
                             element={<AgentMode />}
                             handle={routeTitles.agentMode}
                             path="agent-mode"
+                        />
+                        <Route
+                            element={<AgentModeSessionWithProvider />}
+                            handle={routeTitles.agentModeSession}
+                            path="agent-mode/:flowId"
                         />
                     </Route>
 

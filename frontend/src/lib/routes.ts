@@ -18,6 +18,7 @@ function withQuery(path: string, params: Record<string, string | undefined>): st
 
 export const routes = {
     agentMode: '/agent-mode',
+    agentModeSession: (id: number | string, { tab }: { tab?: string } = {}) => withQuery(`/agent-mode/${id}`, { tab }),
     dashboard: '/dashboard',
 
     flow: (id: number | string, { tab }: { tab?: string } = {}) => withQuery(`/flows/${id}`, { tab }),
