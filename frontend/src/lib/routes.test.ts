@@ -6,6 +6,9 @@ import { routes } from './routes';
 // Mirrors the absolute route patterns from app.tsx; keep in sync when routes change there.
 const builtUrlToPattern: [string, string][] = [
     [routes.dashboard, '/dashboard'],
+    [routes.agentMode, '/agent-mode'],
+    [routes.agentModeSession('abc'), '/agent-mode/:flowId'],
+    [routes.agentModeSession('abc', { tab: 'assistant' }), '/agent-mode/:flowId'],
     [routes.flows, '/flows'],
     [routes.newFlow, '/flows/new'],
     [routes.flow('abc'), '/flows/:flowId'],
@@ -38,6 +41,8 @@ describe('routes registry', () => {
     it('encodes query params for builders that accept them', () => {
         expect(routes.flow('1', { tab: 'chat' })).toBe('/flows/1?tab=chat');
         expect(routes.flow('1')).toBe('/flows/1');
+        expect(routes.agentModeSession('7', { tab: 'automation' })).toBe('/agent-mode/7?tab=automation');
+        expect(routes.agentModeSession(7)).toBe('/agent-mode/7');
         expect(routes.settings.newProvider({ id: 'a', type: 'b' })).toBe('/settings/providers/new?id=a&type=b');
         expect(routes.settings.newProvider()).toBe('/settings/providers/new');
     });

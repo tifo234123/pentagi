@@ -1,0 +1,15 @@
+# Optional workshop UI overlay: mounts a locally built `frontend/dist` into
+# `pentagi-workshop` via STATIC_DIR without rebuilding the Go backend image.
+#
+# Usage:
+#   docker compose -p pentagi-workshop --env-file .env.workshop \
+#     -f docker-compose.yml -f docker-compose.workshop.yml \
+#     -f docker-compose-cli-bridge.yml -f docker-compose.workshop-ui.yml \
+#     up -d --no-deps pentagi
+
+services:
+  pentagi:
+    environment:
+      - STATIC_DIR=/opt/pentagi/fe-workshop
+    volumes:
+      - ./frontend/dist:/opt/pentagi/fe-workshop:ro
